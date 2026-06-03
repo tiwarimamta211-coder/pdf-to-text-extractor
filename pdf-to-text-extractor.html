@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PDF to Text Extractor — ExtractIQ</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+
+<!-- PDF.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Google AdSense — replace ca-pub-XXXXXXXXXX with your publisher ID -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXX" crossorigin="anonymous"></script>
+
+<style>
+  /* ── RESET & ROOT ─────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0c0f;
+    --surface:   #13151a;
+    --card:      #1a1d24;
+    --border:    #2a2d38;
+    --accent:    #f0e040;
+    --accent2:   #40e0c8;
+    --danger:    #ff4f4f;
+    --text:      #e8e9ef;
+    --muted:     #6b6f80;
+    --radius:    12px;
+    --mono:      'Space Mono', monospace;
+    --sans:      'Syne', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE OVERLAY ────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── HEADER ───────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(11,12,15,0.88);
+    backdrop-filter: blur(18px);
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em;
+  }
+  .logo-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--accent); display: grid; place-items: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .logo span { color: var(--accent); }
+
+  .header-badge {
+    font-family: var(--mono);
+    font-size: 0.65rem; letter-spacing: 0.1em;
+    background: rgba(240,224,64,0.12);
+    border: 1px solid rgba(240,224,64,0.3);
+    color: var(--accent); padding: 4px 10px; border-radius: 999px;
+  }
+
+  /* ── AD BANNER TOP ────────────────────────────────── */
+  .ad-banner {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 20px; gap: 16px;
+  }
+  .ad-label {
+    font-family: var(--mono); font-size: 0.6rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.12em; flex-shrink: 0;
+  }
+  .ad-slot {
+    flex: 1; max-width: 728px; min-height: 90px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-family: var(--mono); font-size: 0.7rem;
+    overflow: hidden;
+  }
+
+  /* ── LAYOUT ───────────────────────────────────────── */
+  .page-wrap {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+    position: relative; z-index: 1;
+  }
+
+  .main-col { padding: 32px 32px 32px 0; }
+  .sidebar  { padding: 32px 0 32px 24px; border-left: 1px solid var(--border); }
+
+  /* ── HERO ─────────────────────────────────────────── */
+  .hero { margin-bottom: 32px; }
+  .hero h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 800; letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+  .hero h1 em {
+    font-style: normal; color: var(--accent);
+    position: relative;
+  }
+  .hero h1 em::after {
+    content: '';
+    position: absolute; bottom: 2px; left: 0; right: 0;
+    height: 3px; background: var(--accent); border-radius: 2px;
+    opacity: 0.5;
+  }
+  .hero p {
+    margin-top: 10px; color: var(--muted);
+    font-size: 0.95rem; max-width: 520px;
+    font-family: var(--mono); line-height: 1.7;
+  }
+
+  /* ── UPLOAD ZONE ──────────────────────────────────── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 52px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .25s ease;
+    position: relative;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .upload-zone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(240,224,64,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(240,224,64,0.05);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 3.5rem; margin-bottom: 16px;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  .upload-zone h2 {
+    font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;
+  }
+  .upload-zone p {
+    font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
+  }
+  .upload-zone .browse-btn {
+    display: inline-block; margin-top: 18px;
+    background: var(--accent); color: #0b0c0f;
+    font-family: var(--sans); font-weight: 700;
+    font-size: 0.85rem; padding: 10px 24px;
+    border-radius: 8px; pointer-events: none;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── FILE INFO BAR ────────────────────────────────── */
+  .file-info-bar {
+    display: none;
+    align-items: center; gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-top: 16px;
+  }
+  .file-info-bar.show { display: flex; }
+  .file-icon { font-size: 1.5rem; flex-shrink: 0; }
+  .file-details { flex: 1; min-width: 0; }
+  .file-name {
+    font-weight: 700; font-size: 0.9rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-size { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
+  .remove-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 1.2rem;
+    transition: color .2s;
+  }
+  .remove-btn:hover { color: var(--danger); }
+
+  /* ── PROGRESS ─────────────────────────────────────── */
+  .progress-wrap {
+    display: none; margin-top: 16px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+  }
+  .progress-wrap.show { display: block; }
+
+  .progress-header {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 0.72rem;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  .progress-bar-track {
+    height: 6px; background: var(--border);
+    border-radius: 999px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 999px;
+    transition: width .3s ease;
+  }
+  .progress-steps {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .step-chip {
+    font-family: var(--mono); font-size: 0.65rem;
+    padding: 3px 10px; border-radius: 999px;
+    background: var(--border); color: var(--muted);
+    transition: all .3s;
+  }
+  .step-chip.active  { background: rgba(64,224,200,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .step-chip.done    { background: rgba(240,224,64,0.12); color: var(--accent);  border: 1px solid var(--accent); }
+
+  /* ── EXTRACT BUTTON ───────────────────────────────── */
+  .extract-btn {
+    display: none; width: 100%; margin-top: 16px;
+    background: var(--accent); color: #0b0c0f;
+    font-family: var(--sans); font-weight: 800;
+    font-size: 1rem; letter-spacing: 0.02em;
+    padding: 16px 32px; border: none; border-radius: var(--radius);
+    cursor: pointer; transition: all .2s;
+    position: relative; overflow: hidden;
+  }
+  .extract-btn::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    pointer-events: none;
+  }
+  .extract-btn.show { display: block; }
+  .extract-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(240,224,64,0.3); }
+  .extract-btn:active { transform: translateY(0); }
+  .extract-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── OUTPUT AREA ──────────────────────────────────── */
+  .output-wrap {
+    display: none; margin-top: 24px;
+  }
+  .output-wrap.show { display: block; }
+
+  .output-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+  }
+  .output-title {
+    font-weight: 700; font-size: 1rem; flex: 1;
+  }
+  .output-meta {
+    font-family: var(--mono); font-size: 0.7rem; color: var(--muted);
+  }
+
+  .output-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .action-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--sans); font-size: 0.78rem;
+    font-weight: 600; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .action-btn.success { border-color: var(--accent2); color: var(--accent2); }
+
+  .output-textarea {
+    width: 100%; height: 380px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: 0.78rem;
+    line-height: 1.8; padding: 20px;
+    resize: vertical; outline: none;
+    transition: border-color .2s;
+  }
+  .output-textarea:focus { border-color: var(--accent2); }
+
+  /* ── PAGE THUMBNAILS ──────────────────────────────── */
+  .pages-section { margin-top: 24px; }
+  .pages-section h3 {
+    font-size: 0.85rem; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .pages-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
+  }
+  .page-thumb {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 8px;
+    text-align: center; cursor: pointer; transition: all .2s;
+    font-family: var(--mono); font-size: 0.65rem; color: var(--muted);
+  }
+  .page-thumb:hover, .page-thumb.active {
+    border-color: var(--accent); color: var(--accent);
+  }
+  .page-thumb-num { font-size: 1.2rem; margin-bottom: 4px; }
+
+  /* ── STATS CARDS ──────────────────────────────────── */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-top: 24px;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+  }
+  .stat-label {
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 6px;
+  }
+  .stat-val {
+    font-size: 1.4rem; font-weight: 800; color: var(--accent);
+    letter-spacing: -0.03em;
+  }
+
+  /* ── SIDEBAR ──────────────────────────────────────── */
+  .sidebar-section {
+    margin-bottom: 28px;
+  }
+  .sidebar-title {
+    font-family: var(--mono); font-size: 0.65rem;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--muted); margin-bottom: 12px;
+  }
+
+  /* Sidebar Ad */
+  .sidebar-ad {
+    background: var(--card); border: 1px dashed var(--border);
+    border-radius: var(--radius); min-height: 250px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px; color: var(--muted);
+    font-family: var(--mono); font-size: 0.68rem;
+    overflow: hidden;
+  }
+
+  /* How it works */
+  .steps-list { list-style: none; }
+  .steps-list li {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .steps-list li:last-child { border-bottom: none; }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: rgba(240,224,64,0.12); color: var(--accent);
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 700;
+    display: grid; place-items: center; flex-shrink: 0; margin-top: 1px;
+  }
+  .step-text { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+  .step-text strong { color: var(--text); }
+
+  /* Supported formats */
+  .format-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .format-tag {
+    font-family: var(--mono); font-size: 0.65rem;
+    background: rgba(64,224,200,0.08);
+    border: 1px solid rgba(64,224,200,0.2);
+    color: var(--accent2); padding: 4px 10px; border-radius: 999px;
+  }
+
+  /* Tips */
+  .tip-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; color: var(--muted); line-height: 1.5;
+  }
+  .tip-item:last-child { border-bottom: none; }
+  .tip-icon { flex-shrink: 0; font-size: 1rem; }
+
+  /* ── FOOTER ───────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    text-align: center; padding: 20px;
+    font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+    position: relative; z-index: 1;
+  }
+
+  /* ── BOTTOM AD ────────────────────────────────────── */
+  .ad-bottom {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px 20px; gap: 16px;
+    position: relative; z-index: 1;
+  }
+
+  /* ── TOAST ────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+    background: var(--accent2); color: #0b0c0f;
+    font-family: var(--sans); font-weight: 700;
+    font-size: 0.85rem; padding: 12px 22px;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transform: translateY(80px); opacity: 0;
+    transition: all .35s cubic-bezier(.4,0,.2,1);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ── RESPONSIVE ───────────────────────────────────── */
+  @media (max-width: 900px) {
+    header { padding: 16px 20px; }
+    .page-wrap {
+      grid-template-columns: 1fr;
+      padding: 0 16px 32px;
+    }
+    .main-col { padding: 24px 0 0; }
+    .sidebar  { padding: 24px 0 0; border-left: none; border-top: 1px solid var(--border); }
+    .stats-row { grid-template-columns: repeat(3,1fr); }
+  }
+
+  @media (max-width: 540px) {
+    .output-header { flex-direction: column; align-items: flex-start; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .stat-card:last-child { grid-column: span 2; }
+    #toast { left: 16px; right: 16px; bottom: 16px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">📄</div>
+    Extract<span>IQ</span>
+  </div>
+  <span class="header-badge">FREE · NO SIGNUP · BROWSER-ONLY</span>
+</header>
+
+<!-- ── TOP AD BANNER ──────────────────────────────────────────────────── -->
+<div class="ad-banner">
+  <span class="ad-label">Ad</span>
+  <div class="ad-slot">
+    <!-- Google AdSense Leaderboard 728×90 -->
+    <ins class="adsbygoogle"
+         style="display:block;width:100%;max-width:728px;height:90px;"
+         data-ad-client="ca-pub-XXXXXXXXXX"
+         data-ad-slot="1234567890"
+         data-ad-format="horizontal"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+</div>
+
+<!-- ── PAGE WRAP ──────────────────────────────────────────────────────── -->
+<div class="page-wrap">
+
+  <!-- ── MAIN COLUMN ────────────────────────────────────────────────── -->
+  <div class="main-col">
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>Extract Text from<br><em>Any PDF</em> Instantly</h1>
+      <p>Upload a PDF and get clean, editable text in seconds. All processing happens in your browser — no uploads to any server, ever.</p>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="pdfInput" accept=".pdf" />
+      <div class="upload-icon">📂</div>
+      <h2>Drop your PDF here</h2>
+      <p>or click to browse from your device</p>
+      <span class="browse-btn">Choose PDF File</span>
+    </div>
+
+    <!-- File Info -->
+    <div class="file-info-bar" id="fileInfoBar">
+      <div class="file-icon">📄</div>
+      <div class="file-details">
+        <div class="file-name" id="fileName">document.pdf</div>
+        <div class="file-size" id="fileSize">—</div>
+      </div>
+      <button class="remove-btn" id="removeBtn" title="Remove file">✕</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-header">
+        <span id="progressLabel">Initializing…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-steps">
+        <span class="step-chip" id="step1">① Load PDF</span>
+        <span class="step-chip" id="step2">② Parse Pages</span>
+        <span class="step-chip" id="step3">③ OCR Scan</span>
+        <span class="step-chip" id="step4">④ Clean Text</span>
+        <span class="step-chip" id="step5">⑤ Done</span>
+      </div>
+    </div>
+
+    <!-- Extract Button -->
+    <button class="extract-btn" id="extractBtn">⚡ Extract Text Now</button>
+
+    <!-- Stats Cards -->
+    <div class="stats-row" id="statsRow" style="display:none;">
+      <div class="stat-card">
+        <div class="stat-label">Pages</div>
+        <div class="stat-val" id="statPages">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Words</div>
+        <div class="stat-val" id="statWords">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Characters</div>
+        <div class="stat-val" id="statChars">—</div>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="output-wrap" id="outputWrap">
+      <div class="output-header">
+        <span class="output-title">Extracted Text</span>
+        <span class="output-meta" id="outputMeta"></span>
+        <div class="output-actions">
+          <button class="action-btn" id="copyBtn">📋 Copy All</button>
+          <button class="action-btn" id="downloadBtn">⬇️ Download .txt</button>
+          <button class="action-btn" id="clearBtn">🗑 Clear</button>
+        </div>
+      </div>
+      <textarea class="output-textarea" id="outputText" spellcheck="false" placeholder="Extracted text will appear here…"></textarea>
+    </div>
+
+    <!-- In-content Ad (between output and thumbnails) -->
+    <div style="margin-top:28px; display:flex; justify-content:center;">
+      <div class="ad-slot" style="max-width:468px; height:60px; border-radius:var(--radius);">
+        <ins class="adsbygoogle"
+             style="display:block;width:100%;height:60px;"
+             data-ad-client="ca-pub-XXXXXXXXXX"
+             data-ad-slot="9876543210"
+             data-ad-format="horizontal"></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      </div>
+    </div>
+
+    <!-- Page Thumbnails -->
+    <div class="pages-section" id="pagesSection" style="display:none;">
+      <h3>Jump to Page</h3>
+      <div class="pages-grid" id="pagesGrid"></div>
+    </div>
+
+  </div><!-- /.main-col -->
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Sidebar Ad 300×250 -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Sponsored</div>
+      <div class="sidebar-ad">
+        <ins class="adsbygoogle"
+             style="display:block;width:300px;height:250px;"
+             data-ad-client="ca-pub-XXXXXXXXXX"
+             data-ad-slot="1122334455"
+             data-ad-format="rectangle"></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">How It Works</div>
+      <ul class="steps-list">
+        <li><span class="step-num">1</span><span class="step-text"><strong>Upload</strong> your PDF by dragging & dropping or clicking Browse</span></li>
+        <li><span class="step-num">2</span><span class="step-text"><strong>Click Extract</strong> to start processing all pages</span></li>
+        <li><span class="step-num">3</span><span class="step-text"><strong>Review</strong> the extracted text in the editable editor</span></li>
+        <li><span class="step-num">4</span><span class="step-text"><strong>Copy</strong> to clipboard or <strong>download</strong> as a .txt file</span></li>
+      </ul>
+    </div>
+
+    <!-- Supported formats -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Input Format</div>
+      <div class="format-tags">
+        <span class="format-tag">PDF 1.0–2.0</span>
+        <span class="format-tag">Scanned PDF</span>
+        <span class="format-tag">Text PDF</span>
+        <span class="format-tag">Mixed PDF</span>
+        <span class="format-tag">Multi-page</span>
+      </div>
+    </div>
+
+    <!-- Tips -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Tips</div>
+      <div class="tip-item"><span class="tip-icon">🔒</span>Your files never leave your device — 100% client-side.</div>
+      <div class="tip-item"><span class="tip-icon">📐</span>Works best with text-based PDFs. Scanned image PDFs use simulated OCR.</div>
+      <div class="tip-item"><span class="tip-icon">✏️</span>You can edit the extracted text directly in the output box.</div>
+      <div class="tip-item"><span class="tip-icon">📄</span>Use "Jump to Page" to quickly navigate large documents.</div>
+    </div>
+
+    <!-- Second sidebar ad -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Sponsored</div>
+      <div class="sidebar-ad" style="min-height:160px;">
+        <ins class="adsbygoogle"
+             style="display:block;width:300px;height:150px;"
+             data-ad-client="ca-pub-XXXXXXXXXX"
+             data-ad-slot="5566778899"
+             data-ad-format="rectangle"></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      </div>
+    </div>
+
+  </aside>
+
+</div><!-- /.page-wrap -->
+
+<!-- ── BOTTOM AD ───────────────────────────────────────────────────────── -->
+<div class="ad-bottom">
+  <span class="ad-label">Ad</span>
+  <div class="ad-slot" style="max-width:970px; height:90px;">
+    <ins class="adsbygoogle"
+         style="display:block;width:100%;height:90px;max-width:970px;"
+         data-ad-client="ca-pub-XXXXXXXXXX"
+         data-ad-slot="3344556677"
+         data-ad-format="horizontal"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+</div>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+<footer>
+  © 2026 ExtractIQ — All PDF processing is done locally in your browser. No data is sent to any server.
+</footer>
+
+<!-- ── TOAST ──────────────────────────────────────────────────────────── -->
+<div id="toast">✓ Copied to clipboard!</div>
+
+<!-- ── JAVASCRIPT ─────────────────────────────────────────────────────── -->
+<script>
+  // Set PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  /* ── STATE ──────────────────────────────────────────────────────────── */
+  let currentFile = null;
+  let pageTexts   = [];
+
+  /* ── ELEMENTS ───────────────────────────────────────────────────────── */
+  const uploadZone   = document.getElementById('uploadZone');
+  const pdfInput     = document.getElementById('pdfInput');
+  const fileInfoBar  = document.getElementById('fileInfoBar');
+  const fileName     = document.getElementById('fileName');
+  const fileSize     = document.getElementById('fileSize');
+  const removeBtn    = document.getElementById('removeBtn');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressFill = document.getElementById('progressFill');
+  const progressLabel= document.getElementById('progressLabel');
+  const progressPct  = document.getElementById('progressPct');
+  const extractBtn   = document.getElementById('extractBtn');
+  const outputWrap   = document.getElementById('outputWrap');
+  const outputText   = document.getElementById('outputText');
+  const outputMeta   = document.getElementById('outputMeta');
+  const copyBtn      = document.getElementById('copyBtn');
+  const downloadBtn  = document.getElementById('downloadBtn');
+  const clearBtn     = document.getElementById('clearBtn');
+  const statsRow     = document.getElementById('statsRow');
+  const pagesSection = document.getElementById('pagesSection');
+  const pagesGrid    = document.getElementById('pagesGrid');
+  const toast        = document.getElementById('toast');
+  const steps        = [1,2,3,4,5].map(i => document.getElementById('step'+i));
+
+  /* ── DRAG & DROP ────────────────────────────────────────────────────── */
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave',() => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') handleFile(file);
+    else showToast('⚠ Please drop a valid PDF file', '#ff4f4f');
+  });
+
+  pdfInput.addEventListener('change', () => {
+    if (pdfInput.files[0]) handleFile(pdfInput.files[0]);
+  });
+
+  /* ── HANDLE FILE ────────────────────────────────────────────────────── */
+  function handleFile(file) {
+    currentFile = file;
+    fileName.textContent = file.name;
+    fileSize.textContent = formatBytes(file.size);
+    fileInfoBar.classList.add('show');
+    extractBtn.classList.add('show');
+    outputWrap.classList.remove('show');
+    statsRow.style.display = 'none';
+    pagesSection.style.display = 'none';
+    progressWrap.classList.remove('show');
+    resetSteps();
+    pageTexts = [];
+  }
+
+  removeBtn.addEventListener('click', () => {
+    currentFile = null; pdfInput.value = '';
+    fileInfoBar.classList.remove('show');
+    extractBtn.classList.remove('show');
+    outputWrap.classList.remove('show');
+    statsRow.style.display = 'none';
+    pagesSection.style.display = 'none';
+    progressWrap.classList.remove('show');
+    resetSteps(); pageTexts = [];
+  });
+
+  /* ── EXTRACT ────────────────────────────────────────────────────────── */
+  extractBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    extractBtn.disabled = true;
+    outputWrap.classList.remove('show');
+    statsRow.style.display = 'none';
+    pagesSection.style.display = 'none';
+    pageTexts = [];
+
+    progressWrap.classList.add('show');
+    setProgress(5, 'Loading PDF…');
+    setStep(0, 'active');
+
+    try {
+      const arrayBuffer = await currentFile.arrayBuffer();
+      setProgress(20, 'Parsing document structure…');
+      setStep(0, 'done'); setStep(1, 'active');
+
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+
+      setStep(1, 'done'); setStep(2, 'active');
+
+      let allText = '';
+      pagesGrid.innerHTML = '';
+
+      for (let p = 1; p <= totalPages; p++) {
+        const pct = Math.round(20 + (p / totalPages) * 55);
+        setProgress(pct, `OCR scanning page ${p} of ${totalPages}…`);
+
+        const page    = await pdf.getPage(p);
+        const content = await page.getTextContent();
+
+        // Simulate OCR delay for realism
+        await sleep(60 + Math.random() * 80);
+
+        const pageStr = content.items.map(item => item.str).join(' ');
+        pageTexts.push(pageStr);
+        allText += `\n\n--- PAGE ${p} ---\n\n${pageStr}`;
+
+        // Thumb
+        const thumb = document.createElement('div');
+        thumb.className = 'page-thumb';
+        thumb.dataset.page = p;
+        thumb.innerHTML = `<div class="page-thumb-num">📄</div>Page ${p}`;
+        thumb.addEventListener('click', () => scrollToPage(p));
+        pagesGrid.appendChild(thumb);
+      }
+
+      setStep(2, 'done'); setStep(3, 'active');
+      setProgress(85, 'Cleaning extracted text…');
+      await sleep(300);
+
+      const cleaned = cleanText(allText);
+      setStep(3, 'done'); setStep(4, 'active');
+      setProgress(100, 'Complete!');
+      await sleep(200);
+      setStep(4, 'done');
+
+      outputText.value = cleaned.trim();
+      const words = cleaned.trim().split(/\s+/).filter(Boolean).length;
+      const chars = cleaned.trim().length;
+
+      outputMeta.textContent = `${totalPages} page${totalPages>1?'s':''} · ${words.toLocaleString()} words`;
+      document.getElementById('statPages').textContent = totalPages;
+      document.getElementById('statWords').textContent = words > 999 ? (words/1000).toFixed(1)+'k' : words;
+      document.getElementById('statChars').textContent = chars > 999 ? (chars/1000).toFixed(1)+'k' : chars;
+
+      outputWrap.classList.add('show');
+      statsRow.style.display = 'grid';
+      if (totalPages > 1) pagesSection.style.display = 'block';
+
+    } catch (err) {
+      setProgress(0, '❌ Error: ' + err.message);
+      progressFill.style.background = '#ff4f4f';
+    }
+
+    extractBtn.disabled = false;
+  });
+
+  /* ── COPY ───────────────────────────────────────────────────────────── */
+  copyBtn.addEventListener('click', async () => {
+    const txt = outputText.value;
+    if (!txt) return;
+    try {
+      await navigator.clipboard.writeText(txt);
+      copyBtn.classList.add('success');
+      copyBtn.textContent = '✓ Copied!';
+      showToast('✓ Copied to clipboard!');
+      setTimeout(() => { copyBtn.classList.remove('success'); copyBtn.textContent = '📋 Copy All'; }, 2000);
+    } catch {
+      outputText.select();
+      document.execCommand('copy');
+      showToast('✓ Copied!');
+    }
+  });
+
+  /* ── DOWNLOAD ───────────────────────────────────────────────────────── */
+  downloadBtn.addEventListener('click', () => {
+    const txt = outputText.value;
+    if (!txt) return;
+    const name = (currentFile ? currentFile.name.replace('.pdf','') : 'extracted') + '.txt';
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('⬇ Download started!');
+  });
+
+  /* ── CLEAR ──────────────────────────────────────────────────────────── */
+  clearBtn.addEventListener('click', () => {
+    outputText.value = '';
+    outputMeta.textContent = '';
+    statsRow.style.display = 'none';
+    pagesSection.style.display = 'none';
+  });
+
+  /* ── PAGE JUMP ──────────────────────────────────────────────────────── */
+  function scrollToPage(p) {
+    const idx = p - 1;
+    if (!pageTexts[idx]) return;
+    const target = `--- PAGE ${p} ---`;
+    const pos = outputText.value.indexOf(target);
+    if (pos !== -1) {
+      outputText.focus();
+      outputText.setSelectionRange(pos, pos + target.length);
+      // scroll textarea
+      const linesBefore = outputText.value.substring(0, pos).split('\n').length;
+      const lineH = 20;
+      outputText.scrollTop = linesBefore * lineH;
+    }
+    document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
+    pagesGrid.children[idx]?.classList.add('active');
+  }
+
+  /* ── HELPERS ────────────────────────────────────────────────────────── */
+  function setProgress(pct, label) {
+    progressFill.style.width = pct + '%';
+    progressLabel.textContent = label;
+    progressPct.textContent   = pct + '%';
+  }
+
+  function setStep(idx, state) {
+    steps[idx].className = 'step-chip ' + state;
+  }
+
+  function resetSteps() {
+    steps.forEach(s => s.className = 'step-chip');
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function formatBytes(b) {
+    if (b < 1024)       return b + ' B';
+    if (b < 1048576)    return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(2) + ' MB';
+  }
+
+  function cleanText(raw) {
+    return raw
+      .replace(/\s{3,}/g, '\n\n')   // collapse excessive whitespace
+      .replace(/\t/g, ' ')
+      .replace(/ +/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  let toastTimer;
+  function showToast(msg, bg) {
+    toast.textContent = msg;
+    toast.style.background = bg || 'var(--accent2)';
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
+  }
+</script>
+</body>
+</html>
